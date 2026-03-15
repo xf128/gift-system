@@ -1,0 +1,18 @@
+services:
+  gift-dev:
+    build: .
+    volumes:
+      - ./:/app
+      - /app/node_modules
+      - ./db.sqlite:/app/db.sqlite
+    ports:
+      - "3002:3000"
+    environment:
+      - PORT=3000
+      - STATIC_DIR=public
+      - FUNCTIONS_DIR=functions
+      - EMAILJS_SERVICE_ID=service_bl0tl8e
+      - EMAILJS_TEMPLATE_ID=template_7efopjr
+      - EMAILJS_PUBLIC_KEY=0e50SkjIFjxvumFIc
+      - EMAILJS_PRIVATE_KEY=WEXzwa8qG4x51t8hUfJ2E
+    restart: unless-stopped

@@ -1,0 +1,467 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="0">
+    <title>AI协会 - 主机券领取</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Microsoft YaHei', sans-serif;
+            background: linear-gradient(135deg, #0a0a2a 0%, #1a1a3a 50%, #0a0a2a 100%);
+            min-height: 100vh; color: #fff; display: flex;
+            justify-content: center; align-items: center; padding: 20px;
+        }
+        .container {
+            width: 100%; max-width: 480px;
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(0, 243, 255, 0.2);
+            border-radius: 20px; padding: 40px 30px;
+            backdrop-filter: blur(10px);
+        }
+        .logo { text-align: center; margin-bottom: 30px; }
+        .logo-icon {
+            width: 80px; height: 80px;
+            background: linear-gradient(135deg, #00f3ff, #b829ff);
+            border-radius: 50%; margin: 0 auto 15px;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 36px;
+        }
+        h1 {
+            font-size: 1.8em; text-align: center;
+            background: linear-gradient(90deg, #00f3ff, #b829ff);
+            -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+        }
+        .subtitle { text-align: center; color: rgba(255,255,255,0.6); font-size: 0.95em; }
+        .form-group { margin-bottom: 25px; }
+        input, textarea {
+            width: 100%; padding: 15px;
+            border: 2px solid rgba(0, 243, 255, 0.3);
+            border-radius: 10px; background: rgba(0, 0, 0, 0.3);
+            color: #fff; font-size: 1em;
+            transition: border-color 0.3s;
+        }
+        input:focus, textarea:focus {
+            outline: none; border-color: #00f3ff;
+        }
+        .btn {
+            width: 100%; padding: 16px; border: none; border-radius: 10px;
+            font-size: 1.1em; font-weight: 600; cursor: pointer;
+            background: linear-gradient(135deg, #00f3ff, #b829ff);
+            color: #fff; transition: all 0.3s;
+            position: relative;
+            display: flex; align-items: center; justify-content: center;
+        }
+        .btn:hover:not(:disabled) { transform: translateY(-2px); box-shadow: 0 5px 20px rgba(0, 243, 255, 0.4); }
+        .btn:disabled { opacity: 0.6; cursor: not-allowed; transform: none !important; }
+        .btn.loading { color: transparent !important; }
+        .btn.loading::after {
+            content: ''; position: absolute;
+            width: 20px; height: 20px;
+            border: 2px solid #fff;
+            border-radius: 50%;
+            border-top-color: transparent;
+            animation: spinner 0.8s linear infinite;
+        }
+        @keyframes spinner { to { transform: rotate(360deg); } }
+        .btn.success { background: linear-gradient(135deg, #00c853, #00e676) !important; }
+        .btn.success::after { content: '✓'; position: absolute; font-size: 1.2em; }
+        .btn.countdown { background: rgba(255,255,255,0.1) !important; }
+        .error { color: #ff6b6b; font-size: 0.9em; margin-top: 10px; text-align: center; }
+        .hint { font-size: 0.8em; color: rgba(255,255,255,0.5); margin-top: 5px; }
+        .page { display: none; }
+        .page.active { display: block; }
+        .coupon-code {
+            background: linear-gradient(90deg, #00f3ff, #b829ff);
+            padding: 20px; border-radius: 10px; text-align: center; margin: 20px 0;
+        }
+        .coupon-code #success-code { font-size: 1.1em; font-weight: bold; font-family: monospace; }
+        .back-link { text-align: center; margin-top: 20px; }
+        .back-link a { color: rgba(255,255,255,0.6); text-decoration: none; }
+        .back-link a:hover { color: #00f3ff; }
+        .admin-section { margin-top: 30px; padding-top: 20px; border-top: 1px solid rgba(0, 243, 255, 0.3); }
+        .danger-zone { margin-top: 20px; padding-top: 20px; border-top: 1px solid rgba(255, 107, 107, 0.3); }
+        .btn-secondary { background: transparent; border: 2px solid #00f3ff; color: #00f3ff; }
+        .btn-danger { background: linear-gradient(135deg, #ff5252, #ff1744); }
+        .btn-outline { background: transparent; border: 2px solid rgba(255,255,255,0.3); color: rgba(255,255,255,0.8); }
+        .record-item {
+            padding: 10px; background: rgba(255,255,255,0.05);
+            margin: 5px 0; border-radius: 8px; font-size: 0.9em;
+        }
+        .modal {
+            display: none; position: fixed; z-index: 200;
+            left: 0; top: 0; width: 100%; height: 100%;
+            background-color: rgba(0,0,0,0.8); backdrop-filter: blur(5px);
+            justify-content: center; align-items: center;
+        }
+        .modal-content-scrollable {
+            background-color: #1a1a3a; margin: 10% auto; padding: 20px;
+            border: 1px solid #00f3ff; border-radius: 15px;
+            width: 90%; max-width: 400px; max-height: 80vh; overflow-y: auto;
+        }
+        .modal-content-scrollable h3 { color: #00f3ff; text-align: center; margin-bottom: 20px; }
+        .modal-content-scrollable .close-btn { color: #aaa; float: right; font-size: 28px; font-weight: bold; }
+        .modal-content-scrollable .close-btn:hover { color: #00f3ff; cursor: pointer; }
+        .available-gift-item {
+            background: rgba(0, 243, 255, 0.1); padding: 10px; border-radius: 8px; margin-bottom: 8px;
+            border: 1px solid rgba(0, 243, 255, 0.3);
+        }
+        .available-gift-item div { color: #fff; font-weight: bold; }
+        .available-gift-item small { color: rgba(255,255,255,0.7); }
+        .toast {
+            position: fixed; bottom: 30px; left: 50%; transform: translateX(-50%);
+            background: rgba(0,0,0,0.9); color: #fff; padding: 12px 24px; border-radius: 25px;
+            font-size: 0.95em; z-index: 1000; opacity: 0; transition: opacity 0.3s;
+            display: flex; align-items: center; gap: 8px; pointer-events: none;
+        }
+        .toast.show { opacity: 1; }
+        .toast.success { border: 1px solid #00c853; }
+        .toast.error { border: 1px solid #ff5252; }
+        .toast.info { border: 1px solid #00f3ff; }
+        .toggle-switch input:checked + .toggle-slider { background: linear-gradient(135deg, #00f3ff, #b829ff); }
+        .toggle-switch input:checked + .toggle-slider:before { transform: translateX(26px); }
+        .toggle-slider:before {
+            content: ""; position: absolute; height: 26px; width: 26px;
+            left: 4px; bottom: 4px; background-color: white; transition: .4s; border-radius: 50%;
+        }
+    </style>
+    <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@3/dist/email.min.js"></script>
+</head>
+<body>
+    <div class="container">
+        <div class="logo">
+            <div class="logo-icon">🎁</div>
+            <h1>AI协会主机券</h1>
+            <p class="subtitle">广东移动员工专属福利</p>
+        </div>
+
+        <div id="page-login" class="page active">
+            <div class="form-group">
+                <label>公司邮箱</label>
+                <input type="email" id="email" placeholder="请输入您的公司邮箱" value="@gd.chinamobile.com">
+                <p class="hint"><span id="init-hint">正在检查系统状态...</span></p>
+            </div>
+            <div id="login-error" class="error"></div>
+            <button class="btn" id="send-code-btn" onclick="sendCode()" disabled>
+                <span class="btn-text">获取验证码</span>
+            </button>
+            <div class="back-link"><a href="/">← 返回主页</a></div>
+        </div>
+
+        <div id="page-verify" class="page">
+            <div class="form-group">
+                <label>验证码已发送至</label>
+                <p id="verify-email" style="color: #00f3ff;"></p>
+            </div>
+            <div class="form-group">
+                <label>输入验证码</label>
+                <input type="text" id="verify-code" placeholder="请输入6位验证码" maxlength="6">
+            </div>
+            <div id="verify-error" class="error"></div>
+            <button class="btn" id="verify-btn" onclick="verifyAndClaim()">
+                <span class="btn-text">验证并领取</span>
+            </button>
+            <button class="btn btn-secondary" id="resend-btn" onclick="resendCode()" style="margin-top: 15px;">
+                <span class="btn-text">再次发送验证码</span>
+            </button>
+        </div>
+
+        <div id="page-success" class="page">
+            <h2 style="text-align: center; color: #00f3ff;">领取成功！🎉</h2>
+            <div class="coupon-code">
+                <h3>主机券信息</h3>
+                <div id="success-code"></div>
+            </div>
+            <p class="hint" style="text-align: center; color: #ff6b6b; margin: 20px 0;">
+                ⚠️ 每人限领一次，请务必截图保存！
+            </p>
+            <button class="btn" onclick="showExitModal()">
+                <span class="btn-text">我已截图保存，确认退出</span>
+            </button>
+        </div>
+
+        <div id="exit-modal" class="modal" style="display: none;">
+            <div style="background: #1a1a3a; border: 1px solid #00f3ff; padding: 30px; border-radius: 20px; width: 85%; max-width: 360px; text-align: center;">
+                <h3 style="color: #ff6b6b; margin-bottom: 15px;">⚠️ 确认退出？</h3>
+                <p style="margin-bottom: 25px;">请务必截图保存兑换码！<br>退出后将无法再次查看。</p>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
+                    <button class="btn btn-secondary" onclick="hideExitModal()">再截个图</button>
+                    <button class="btn" onclick="confirmExit()">确认已保存</button>
+                </div>
+            </div>
+        </div>
+
+        <div id="page-admin" class="page">
+            <h2 style="text-align: center; color: #00f3ff; margin-bottom: 20px;">管理后台</h2>
+            <div class="admin-section" style="background: rgba(0,243,255,0.1); padding: 15px; border-radius: 10px; border: 1px solid rgba(0,243,255,0.3);">
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                    <div>
+                        <label style="color: #00f3ff; font-size: 1.1em; font-weight: bold;">🚀 领取功能开关</label>
+                    </div>
+                    <label class="toggle-switch" style="position: relative; display: inline-block; width: 60px; height: 34px;">
+                        <input type="checkbox" id="enable-toggle" onchange="toggleEnable()" style="opacity: 0; width: 0; height: 0;">
+                        <span class="toggle-slider" style="position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: #ccc; transition: .4s; border-radius: 34px;"></span>
+                    </label>
+                </div>
+                <div id="toggle-status" style="margin-top: 10px; font-size: 0.9em; text-align: center;"></div>
+            </div>
+            <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 15px; margin: 20px 0; text-align: center;">
+                <div><div id="stat-total">-</div><small>总库存</small></div>
+                <div><div id="stat-claimed">-</div><small>已领取</small></div>
+                <div><div id="stat-remaining">-</div><small>剩余</small></div>
+            </div>
+            <div class="admin-section">
+                <button class="btn btn-outline" onclick="showAvailableGiftsModal()">查看可用主机券</button>
+            </div>
+            <div class="form-group admin-section">
+                <input type="text" id="gift-name" placeholder="主机券名称">
+                <input type="text" id="gift-code" placeholder="兑换码" style="margin-top: 10px;">
+            </div>
+            <button class="btn" id="add-gift-btn" onclick="addGift()">添加主机券</button>
+            <div class="admin-section">
+                <label style="color: #00f3ff; display: block; margin-bottom: 10px;">批量导入 (名称|兑换码)</label>
+                <textarea id="bulk-import" style="min-height: 80px; resize: vertical;"></textarea>
+                <button class="btn" id="import-btn" onclick="importBulk()" style="margin-top: 10px;">批量导入</button>
+            </div>
+            <div class="admin-section">
+                <label style="color: #00f3ff; display: block; margin-bottom: 10px;">领取记录</label>
+                <div id="records-list" style="max-height: 200px; overflow-y: auto;"></div>
+            </div>
+            <div class="danger-zone">
+                <button class="btn btn-danger" onclick="clearAllData()">⚠️ 清空所有数据</button>
+            </div>
+            <div class="back-link"><button class="btn btn-outline" onclick="location.href='./'">← 返回主页</button></div>
+        </div>
+    </div>
+
+    <div id="available-gifts-modal" class="modal">
+        <div class="modal-content-scrollable">
+            <span class="close-btn" onclick="hideAvailableGiftsModal()">×</span>
+            <h3>待领取主机券列表</h3>
+            <div id="available-gifts-list"></div>
+        </div>
+    </div>
+
+    <div id="toast" class="toast"></div>
+
+    <script>
+        const API_BASE = 'api/gift';
+        let currentEmail = '', currentCode = '', lastSendTime = 0;
+        const COOLDOWN_SECONDS = 600; // 10 minutes - consistent with backend
+        let isSystemEnabled = true;
+        
+        // Get admin token from URL parameter (not hardcoded)
+        function getAdminToken() {
+            const params = new URLSearchParams(window.location.search);
+            return params.get('admin') || '';
+        }
+
+        function showToast(msg, type = 'info') {
+            const t = document.getElementById('toast');
+            t.textContent = msg;
+            t.className = `toast show ${type}`;
+            setTimeout(() => t.classList.remove('show'), 3000);
+        }
+
+        async function apiRequest(path, method = 'GET', body = null) {
+            const adminToken = getAdminToken();
+            const headers = { 'Content-Type': 'application/json' };
+            if (adminToken) headers['Authorization'] = `Bearer ${adminToken}`;
+            const options = { method, headers };
+            if (body) options.body = JSON.stringify(body);
+            const res = await fetch(`${API_BASE}${path}`, options);
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error || '请求失败');
+            return data;
+        }
+
+        function setBtnState(id, state, text = '') {
+            const b = document.getElementById(id);
+            if (!b) return;
+            b.classList.remove('loading', 'success', 'error', 'countdown');
+            b.disabled = (state === 'loading' || state === 'countdown');
+            if (state === 'loading') b.classList.add('loading');
+            if (text) {
+                const s = b.querySelector('.btn-text');
+                if (s) s.textContent = text; else b.textContent = text;
+            }
+        }
+
+        async function init() {
+            const adminToken = getAdminToken();
+            
+            try {
+                // 检查系统开关和基本统计
+                const status = await apiRequest('/status');
+                isSystemEnabled = status.enabled;
+                document.getElementById('init-hint').textContent = isSystemEnabled ? '仅支持公司邮箱领券' : '⏰ 未到开放时间';
+                document.getElementById('send-code-btn').disabled = !isSystemEnabled;
+                
+                // Use admin token from URL - backend validates it
+                if (adminToken) {
+                    showPage('page-admin');
+                    loadAdminData();
+                } else {
+                    showPage('page-login');
+                }
+            } catch (e) {
+                showToast('连接系统失败', 'error');
+            }
+        }
+
+        function showPage(id) {
+            document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+            document.getElementById(id).classList.add('active');
+        }
+
+        async function sendCode() {
+            const email = document.getElementById('email').value.trim().toLowerCase();
+            if (!email || !email.endsWith('@gd.chinamobile.com') || email === '@gd.chinamobile.com') {
+                return showToast('请输入有效的公司邮箱', 'error');
+            }
+
+            setBtnState('send-code-btn', 'loading');
+            try {
+                const res = await apiRequest('/send-code', 'POST', { email });
+                currentEmail = email;
+                currentCode = res.mock_code || ''; // 仅测试模式有
+                lastSendTime = Date.now();
+                document.getElementById('verify-email').textContent = email;
+                showPage('page-verify');
+                startCooldown();
+                showToast('验证码已发送');
+            } catch (e) {
+                showToast(e.message, 'error');
+                setBtnState('send-code-btn', 'normal', '获取验证码');
+            }
+        }
+
+        function startCooldown() {
+            const update = () => {
+                const rem = Math.max(0, COOLDOWN_SECONDS - Math.floor((Date.now() - lastSendTime)/1000));
+                if (rem <= 0) {
+                    setBtnState('send-code-btn', 'normal', '获取验证码');
+                    setBtnState('resend-btn', 'normal', '再次发送验证码');
+                } else {
+                    setBtnState('send-code-btn', 'countdown', `${rem}s后重试`);
+                    setBtnState('resend-btn', 'countdown', `${rem}s后重试`);
+                    setTimeout(update, 1000);
+                }
+            };
+            update();
+        }
+
+        async function resendCode() {
+            if (Math.floor((Date.now() - lastSendTime)/1000) < COOLDOWN_SECONDS) return;
+            sendCode();
+        }
+
+        async function verifyAndClaim() {
+            const code = document.getElementById('verify-code').value.trim();
+            if (!code) return showToast('请输入验证码', 'error');
+
+            setBtnState('verify-btn', 'loading');
+            try {
+                const res = await apiRequest('/claim', 'POST', { email: currentEmail, code });
+                document.getElementById('success-code').textContent = res.giftCode;
+                showPage('page-success');
+                showToast('领取成功！', 'success');
+            } catch (e) {
+                showToast(e.message, 'error');
+                setBtnState('verify-btn', 'normal', '验证并领取');
+            }
+        }
+
+        // --- 管理员功能 ---
+        async function loadAdminData() {
+            try {
+                const data = await apiRequest('/admin/data');
+                document.getElementById('stat-total').textContent = data.total;
+                document.getElementById('stat-claimed').textContent = data.claimedCount;
+                document.getElementById('stat-remaining').textContent = data.total - data.claimedCount;
+                document.getElementById('enable-toggle').checked = data.enabled;
+                document.getElementById('toggle-status').innerHTML = data.enabled ? 
+                    '<span style="color: #00c853;">✅ 已启用</span>' : '<span style="color: #ff5252;">⛔ 已关闭</span>';
+                
+                const list = document.getElementById('records-list');
+                list.innerHTML = data.records.map(r => `
+                    <div class="record-item">
+                        <div>${r.email}</div>
+                        <small>${r.giftName} - ${r.time}</small>
+                    </div>
+                `).join('') || '<p style="color:rgba(255,255,255,0.5)">暂无记录</p>';
+            } catch (e) { showToast(e.message, 'error'); }
+        }
+
+        async function toggleEnable() {
+            const enabled = document.getElementById('enable-toggle').checked;
+            try {
+                await apiRequest('/admin/config', 'POST', { enabled });
+                loadAdminData();
+                showToast('设置已更新');
+            } catch (e) { showToast(e.message, 'error'); }
+        }
+
+        async function addGift() {
+            const name = document.getElementById('gift-name').value.trim();
+            const code = document.getElementById('gift-code').value.trim();
+            if (!name || !code) return showToast('请填写完整', 'error');
+            try {
+                await apiRequest('/admin/add', 'POST', { name, code });
+                showToast('添加成功');
+                document.getElementById('gift-name').value = '';
+                document.getElementById('gift-code').value = '';
+                loadAdminData();
+            } catch (e) { showToast(e.message, 'error'); }
+        }
+
+        async function importBulk() {
+            const text = document.getElementById('bulk-import').value.trim();
+            if (!text) return;
+            try {
+                const gifts = text.split('\n').map(l => {
+                    const [name, code] = l.split('|').map(s => s.trim());
+                    return { name, code };
+                }).filter(g => g.name && g.code);
+                await apiRequest('/admin/import', 'POST', { gifts });
+                showToast(`成功导入 ${gifts.length} 张`);
+                document.getElementById('bulk-import').value = '';
+                loadAdminData();
+            } catch (e) { showToast(e.message, 'error'); }
+        }
+
+        async function clearAllData() {
+            if (!confirm('确认清空所有领用记录和库存？')) return;
+            try {
+                await apiRequest('/admin/clear', 'POST');
+                showToast('已清空');
+                loadAdminData();
+            } catch (e) { showToast(e.message, 'error'); }
+        }
+
+        async function showAvailableGiftsModal() {
+            document.getElementById('available-gifts-modal').style.display = 'flex';
+            try {
+                const data = await apiRequest('/admin/available');
+                const list = document.getElementById('available-gifts-list');
+                list.innerHTML = data.map(g => `
+                    <div class="available-gift-item">
+                        <div>${g.name}</div>
+                        <small>${g.code}</small>
+                    </div>
+                `).join('') || '<p style="text-align:center">暂无可用券</p>';
+            } catch (e) { showToast(e.message, 'error'); }
+        }
+
+        function hideAvailableGiftsModal() { document.getElementById('available-gifts-modal').style.display = 'none'; }
+        function showExitModal() { document.getElementById('exit-modal').style.display = 'flex'; }
+        function hideExitModal() { document.getElementById('exit-modal').style.display = 'none'; }
+        function confirmExit() { location.href = './'; }
+
+        init();
+    </script>
+</body>
+</html>

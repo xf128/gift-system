@@ -1,0 +1,11 @@
+{
+  "name": "cloudflare-adapter",
+  "version": "1.0.0",
+  "main": "server.mjs",
+  "type": "module",
+  "dependencies": {
+    "express": "^4.18.2",
+    "better-sqlite3": "^9.4.1",
+    "node-fetch": "^3.3.2"
+  }
+}
