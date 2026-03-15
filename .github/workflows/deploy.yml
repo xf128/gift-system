@@ -1,8 +1,8 @@
-name: Deploy to Cloud
+name: Deploy to Production
 
 on:
   push:
-    branches: [ main, master ]
+    branches: [ main ]
   workflow_dispatch:
 
 jobs:
@@ -10,43 +10,27 @@ jobs:
     runs-on: ubuntu-latest
     
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-      
-    - name: Setup SSH
-      uses: webfactory/ssh-agent@v0.9.0
+    - uses: actions/checkout@v4
+    
+    - name: Deploy Gift App to Server via SCP
+      uses: appleboy/scp-action@master
       with:
-        ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
-        
-    - name: Add host to known hosts
-      run: |
-        mkdir -p ~/.ssh
-        ssh-keyscan -H ${{ secrets.HOST }} >> ~/.ssh/known_hosts
-        
-    - name: Deploy to Cloud Host
-      env:
-        HOST: ${{ secrets.HOST }}
-        USER: ${{ secrets.USER }}
-        MODULE: gift
-      run: |
-        echo "🚀 Deploying $MODULE to $HOST..."
-        
-        # Sync files to remote (exclude sensitive/build files)
-        rsync -avz --delete \
-          --exclude='.git' \
-          --exclude='node_modules' \
-          --exclude='.wrangler' \
-          --exclude='.github' \
-          --exclude='*.log' \
-          --exclude='*.sqlite' \
-          --exclude='*.sqlite3' \
-          --exclude='*.db' \
-          --exclude='test.js' \
-          --exclude='TESTING.md' \
-          ./ \
-          $USER@$HOST:/home/ubuntu/association/apps/$MODULE/
-        
-        # Build and restart container on remote
-        ssh $USER@$HOST "cd /home/ubuntu/association/apps && sudo docker compose build $MODULE && sudo docker compose up -d $MODULE"
-        
-        echo "✅ Deployment completed!"
+        host: ${{ secrets.SSH_HOST }}
+        username: ${{ secrets.SSH_USER }}
+        key: ${{ secrets.SSH_PRIVATE_KEY }}
+        source: "."
+        target: "/home/ubuntu/association/apps/gift"
+        rm: false
+        strip_components: 0
+    
+    - name: Restart Container
+      uses: appleboy/ssh-action@master
+      with:
+        host: ${{ secrets.SSH_HOST }}
+        username: ${{ secrets.SSH_USER }}
+        key: ${{ secrets.SSH_PRIVATE_KEY }}
+        script: |
+          cd /home/ubuntu/association/apps
+          sudo docker compose build gift
+          sudo docker compose up -d gift
+          echo "✅ Gift system deployed!"
