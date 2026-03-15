@@ -29,7 +29,7 @@ export async function onRequestPost({ request, env }) {
         return errorResponse('无效的邮箱地址');
     }
 
-    // Rate limiting: check if code was sent recently (D1 based)
+    // Rate limiting: check if code was sent recently (D1 or SQLite based)
     if (env.DB) {
         const recent = await env.DB.prepare(
             "SELECT created_at FROM gift_codes WHERE email = ? ORDER BY created_at DESC LIMIT 1"
@@ -44,6 +44,7 @@ export async function onRequestPost({ request, env }) {
             }
         }
     }
+    // Note: If env.DB is not available (local Docker), rate limiting is skipped
 
     const data = await getJsonBinData(env.JSONBIN_API_KEY);
     

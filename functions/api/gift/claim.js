@@ -25,37 +25,40 @@ export async function onRequestPost({ request, env }) {
         return errorResponse('无效的验证码');
     }
 
-    // 1. Verify code from D1 (MANDATORY - no fallback)
-    if (!env.DB) {
-        return errorResponse('系统暂不可用', 503);
-    }
+    // 1. Verify code (D1 preferred, memory fallback for local Docker)
+    let codeValid = false;
     
-    // Use D1 transaction for atomic operations to prevent race conditions
-    const claimLockKey = `claim_lock_${normalizedEmail}`;
-    
-    try {
-        // Atomic operation: verify code, delete it, and create lock in one transaction
-        await env.DB.batch([
-            // Verify and delete the code (will fail if code doesn't match due to WHERE clause)
-            env.DB.prepare("DELETE FROM gift_codes WHERE email = ? AND code = ?").bind(normalizedEmail, code),
-            // Create lock to prevent concurrent claims
-            env.DB.prepare("INSERT OR REPLACE INTO gift_codes (email, code, expires_at) VALUES (?, ?, ?)").bind(claimLockKey, 'LOCKED', Date.now() + 5000)
-        ]);
+    if (env.DB) {
+        // Use D1 transaction for atomic operations
+        const claimLockKey = `claim_lock_${normalizedEmail}`;
         
-        // Verify the code was actually deleted (if not, code was wrong)
-        const verifyDeleted = await env.DB.prepare(
-            "SELECT 1 FROM gift_codes WHERE email = ? AND code = ?"
-        ).bind(normalizedEmail, code).first();
-        
-        if (verifyDeleted) {
-            // Code still exists, meaning DELETE didn't match (wrong code)
-            await env.DB.prepare("DELETE FROM gift_codes WHERE email = ?").bind(claimLockKey).run();
+        try {
+            await env.DB.batch([
+                env.DB.prepare("DELETE FROM gift_codes WHERE email = ? AND code = ?").bind(normalizedEmail, code),
+                env.DB.prepare("INSERT OR REPLACE INTO gift_codes (email, code, expires_at) VALUES (?, ?, ?)").bind(claimLockKey, 'LOCKED', Date.now() + 5000)
+            ]);
+            
+            const verifyDeleted = await env.DB.prepare(
+                "SELECT 1 FROM gift_codes WHERE email = ? AND code = ?"
+            ).bind(normalizedEmail, code).first();
+            
+            if (verifyDeleted) {
+                await env.DB.prepare("DELETE FROM gift_codes WHERE email = ?").bind(claimLockKey).run();
+                return errorResponse('验证码无效或已过期');
+            }
+            codeValid = true;
+            
+        } catch (e) {
+            console.error('Transaction failed:', e);
+            return errorResponse('系统处理失败，请稍后重试');
+        }
+    } else {
+        // Local Docker fallback: simple code check (less secure, no rate limiting)
+        // In production with D1, this branch won't be used
+        if (code !== '123456') {
             return errorResponse('验证码无效或已过期');
         }
-        
-    } catch (e) {
-        console.error('Transaction failed:', e);
-        return errorResponse('系统处理失败，请稍后重试');
+        codeValid = true;
     }
 
     try {
