@@ -12,6 +12,25 @@ jobs:
     steps:
     - uses: actions/checkout@v4
     
+    - name: Backup existing config on server
+      uses: appleboy/ssh-action@master
+      with:
+        host: ${{ secrets.SSH_HOST }}
+        username: ${{ secrets.SSH_USER }}
+        key: ${{ secrets.SSH_PRIVATE_KEY }}
+        script: |
+          cd /home/ubuntu/association/apps/gift
+          # 备份现有配置（保留最近5个）
+          BACKUP_DIR="/home/ubuntu/association/backups/gift"
+          mkdir -p $BACKUP_DIR
+          tar czf "$BACKUP_DIR/gift-$(date +%Y%m%d-%H%M%S).tar.gz" \
+            --exclude='node_modules' \
+            --exclude='.git' \
+            -C /home/ubuntu/association/apps/gift .
+          # 只保留最近5个备份
+          ls -t $BACKUP_DIR/*.tar.gz | tail -n +6 | xargs rm -f
+          echo "✅ Backup created"
+    
     - name: Deploy Gift App to Server via SCP
       uses: appleboy/scp-action@master
       with:
@@ -34,3 +53,4 @@ jobs:
           sudo docker compose build gift
           sudo docker compose up -d gift
           echo "✅ Gift system deployed!"
+          echo "Backup location: /home/ubuntu/association/backups/gift/"
