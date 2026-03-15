@@ -1,0 +1,25 @@
+# Dependencies
+node_modules/
+package-lock.json
+
+# Database
+db.sqlite
+*.sqlite
+
+# Environment
+.env
+
+# Build
+build/
+dist/
+
+# Logs
+logs/
+*.log
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Wrangler
+.wrangler/
