@@ -23,3 +23,8 @@ Thumbs.db
 
 # Wrangler
 .wrangler/
+local.db
+test.db
+.env.local
+test-local.sh
+test-server.py

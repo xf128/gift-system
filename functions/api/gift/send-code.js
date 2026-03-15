@@ -29,20 +29,28 @@ export async function onRequestPost({ request, env }) {
         return errorResponse('无效的邮箱地址');
     }
 
-    // Rate limiting: check if code was sent recently
-    // Note: Uses expires_at as proxy for recent send if created_at not available
+    // Rate limiting: check if code was sent recently (within last 60 seconds)
     if (env.DB) {
-        const recent = await env.DB.prepare(
-            "SELECT expires_at FROM gift_codes WHERE email = ? LIMIT 1"
-        ).bind(normalizedEmail).first();
-        
-        // If there's a code that expires in more than 9 minutes (sent less than 1 min ago)
-        if (recent && recent.expires_at) {
-            const timeUntilExpiry = recent.expires_at - Date.now();
-            if (timeUntilExpiry > CODE_EXPIRY_MS - RATE_LIMIT_MS) {
-                const remainSec = Math.ceil((RATE_LIMIT_MS - (CODE_EXPIRY_MS - timeUntilExpiry)) / 1000);
-                return errorResponse(`发送过于频繁，请 ${Math.max(1, remainSec)} 秒后再试`);
+        try {
+            const row = await env.DB.prepare(
+                "SELECT expires_at FROM gift_codes WHERE email = ?"
+            ).bind(normalizedEmail).first();
+            
+            if (row && row.expires_at) {
+                const now = Date.now();
+                const timeSinceExpiry = now - row.expires_at;
+                // If code expires in more than 9 minutes (meaning sent less than 1 min ago)
+                // OR if it's less than 60 seconds since the code was created
+                // Equivalent: expires_at > now + (CODE_EXPIRY_MS - RATE_LIMIT_MS)
+                if (row.expires_at > now + (CODE_EXPIRY_MS - RATE_LIMIT_MS)) {
+                    const remainingMs = row.expires_at - (CODE_EXPIRY_MS - RATE_LIMIT_MS) - now;
+                    const remainSec = Math.max(1, Math.ceil(remainingMs / 1000));
+                    return errorResponse(`发送过于频繁，请 ${remainSec} 秒后再试`);
+                }
             }
+        } catch (e) {
+            console.error('Rate limit check error:', e);
+            // Continue if rate limit check fails
         }
     }
 
@@ -62,36 +70,45 @@ export async function onRequestPost({ request, env }) {
     const code = Math.floor(100000 + Math.random() * 900000).toString();
     
     // Store code in SQLite (expires_at in milliseconds)
+    // Using REPLACE (email is PRIMARY KEY)
     if (env.DB) {
-        await env.DB.prepare(`
-            INSERT OR REPLACE INTO gift_codes (email, code, expires_at)
-            VALUES (?, ?, ?)
-        `).bind(normalizedEmail, code, Date.now() + CODE_EXPIRY_MS).run();
+        try {
+            await env.DB.prepare(`
+                INSERT OR REPLACE INTO gift_codes (email, code, expires_at)
+                VALUES (?, ?, ?)
+            `).bind(normalizedEmail, code, Date.now() + CODE_EXPIRY_MS).run();
+        } catch (e) {
+            console.error('Failed to store code:', e);
+            return errorResponse('系统错误，请稍后重试');
+        }
     }
 
     // Call EmailJS from backend
-    // Added Origin header to simulate browser request
-    const emailRes = await fetch('https://api.emailjs.com/api/v1.0/email/send', {
-        method: 'POST',
-        headers: { 
-            'Content-Type': 'application/json',
-            'Origin': 'https://gift-9cr.pages.dev' 
-        },
-        body: JSON.stringify({
-            service_id: env.EMAILJS_SERVICE_ID,
-            template_id: env.EMAILJS_TEMPLATE_ID,
-            user_id: env.EMAILJS_PUBLIC_KEY,
-            accessToken: env.EMAILJS_PRIVATE_KEY,
-            template_params: {
-                to_email: normalizedEmail,
-                code: code
-            }
-        })
-    });
+    try {
+        const emailRes = await fetch('https://api.emailjs.com/api/v1.0/email/send', {
+            method: 'POST',
+            headers: { 
+                'Content-Type': 'application/json',
+                'Origin': 'https://gift-9cr.pages.dev' 
+            },
+            body: JSON.stringify({
+                service_id: env.EMAILJS_SERVICE_ID,
+                template_id: env.EMAILJS_TEMPLATE_ID,
+                user_id: env.EMAILJS_PUBLIC_KEY,
+                accessToken: env.EMAILJS_PRIVATE_KEY,
+                template_params: {
+                    to_email: normalizedEmail,
+                    code: code
+                }
+            })
+        });
 
-    if (!emailRes.ok) {
-        // Sanitize error message - don't leak internal details
-        return errorResponse(sanitizeError(await emailRes.text()));
+        if (!emailRes.ok) {
+            return errorResponse(sanitizeError(await emailRes.text()));
+        }
+    } catch (e) {
+        console.error('Email send error:', e);
+        return errorResponse('邮件发送失败，请稍后重试');
     }
 
     return jsonResponse({ success: true, msg: '验证码已发送' });
