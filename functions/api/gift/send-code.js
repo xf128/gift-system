@@ -29,22 +29,22 @@ export async function onRequestPost({ request, env }) {
         return errorResponse('无效的邮箱地址');
     }
 
-    // Rate limiting: check if code was sent recently (D1 or SQLite based)
+    // Rate limiting: check if code was sent recently
+    // Note: Uses expires_at as proxy for recent send if created_at not available
     if (env.DB) {
         const recent = await env.DB.prepare(
-            "SELECT created_at FROM gift_codes WHERE email = ? ORDER BY created_at DESC LIMIT 1"
+            "SELECT expires_at FROM gift_codes WHERE email = ? LIMIT 1"
         ).bind(normalizedEmail).first();
         
-        if (recent && recent.created_at) {
-            const createdTime = new Date(recent.created_at).getTime();
-            const elapsed = Date.now() - createdTime;
-            if (elapsed < RATE_LIMIT_MS) {
-                const remainSec = Math.ceil((RATE_LIMIT_MS - elapsed) / 1000);
-                return errorResponse(`发送过于频繁，请 ${remainSec} 秒后再试`);
+        // If there's a code that expires in more than 9 minutes (sent less than 1 min ago)
+        if (recent && recent.expires_at) {
+            const timeUntilExpiry = recent.expires_at - Date.now();
+            if (timeUntilExpiry > CODE_EXPIRY_MS - RATE_LIMIT_MS) {
+                const remainSec = Math.ceil((RATE_LIMIT_MS - (CODE_EXPIRY_MS - timeUntilExpiry)) / 1000);
+                return errorResponse(`发送过于频繁，请 ${Math.max(1, remainSec)} 秒后再试`);
             }
         }
     }
-    // Note: If env.DB is not available (local Docker), rate limiting is skipped
 
     const data = await getJsonBinData(env.JSONBIN_API_KEY);
     
@@ -61,11 +61,11 @@ export async function onRequestPost({ request, env }) {
     // Generate 6-digit code
     const code = Math.floor(100000 + Math.random() * 900000).toString();
     
-    // Store code in D1 (ai_claims_db)
+    // Store code in SQLite (expires_at in milliseconds)
     if (env.DB) {
         await env.DB.prepare(`
-            INSERT OR REPLACE INTO gift_codes (email, code, expires_at, created_at)
-            VALUES (?, ?, ?, datetime('now'))
+            INSERT OR REPLACE INTO gift_codes (email, code, expires_at)
+            VALUES (?, ?, ?)
         `).bind(normalizedEmail, code, Date.now() + CODE_EXPIRY_MS).run();
     }
 

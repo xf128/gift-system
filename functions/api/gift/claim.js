@@ -25,40 +25,36 @@ export async function onRequestPost({ request, env }) {
         return errorResponse('无效的验证码');
     }
 
-    // 1. Verify code (D1 preferred, memory fallback for local Docker)
-    let codeValid = false;
+    // 1. Verify code from SQLite
+    if (!env.DB) {
+        return errorResponse('数据库暂不可用', 503);
+    }
     
-    if (env.DB) {
-        // Use D1 transaction for atomic operations
-        const claimLockKey = `claim_lock_${normalizedEmail}`;
-        
-        try {
-            await env.DB.batch([
-                env.DB.prepare("DELETE FROM gift_codes WHERE email = ? AND code = ?").bind(normalizedEmail, code),
-                env.DB.prepare("INSERT OR REPLACE INTO gift_codes (email, code, expires_at) VALUES (?, ?, ?)").bind(claimLockKey, 'LOCKED', Date.now() + 5000)
-            ]);
-            
-            const verifyDeleted = await env.DB.prepare(
-                "SELECT 1 FROM gift_codes WHERE email = ? AND code = ?"
-            ).bind(normalizedEmail, code).first();
-            
-            if (verifyDeleted) {
-                await env.DB.prepare("DELETE FROM gift_codes WHERE email = ?").bind(claimLockKey).run();
-                return errorResponse('验证码无效或已过期');
-            }
-            codeValid = true;
-            
-        } catch (e) {
-            console.error('Transaction failed:', e);
-            return errorResponse('系统处理失败，请稍后重试');
-        }
-    } else {
-        // Local Docker fallback: simple code check (less secure, no rate limiting)
-        // In production with D1, this branch won't be used
-        if (code !== '123456') {
-            return errorResponse('验证码无效或已过期');
-        }
-        codeValid = true;
+    // Check if code exists and not expired
+    const stored = await env.DB.prepare(
+        "SELECT code, expires_at FROM gift_codes WHERE email = ?"
+    ).bind(normalizedEmail).first();
+
+    if (!stored || stored.code !== code) {
+        return errorResponse('验证码无效或已过期');
+    }
+    
+    if (Date.now() > stored.expires_at) {
+        return errorResponse('验证码已过期');
+    }
+
+    // Use transaction for atomic operations
+    const claimLockKey = `claim_lock_${normalizedEmail}`;
+    
+    try {
+        // Delete used code and create lock
+        await env.DB.prepare("DELETE FROM gift_codes WHERE email = ?").bind(normalizedEmail).run();
+        await env.DB.prepare(
+            "INSERT OR REPLACE INTO gift_codes (email, code, expires_at) VALUES (?, ?, ?)"
+        ).bind(claimLockKey, 'LOCKED', Date.now() + 5000).run();
+    } catch (e) {
+        console.error('Database error:', e);
+        return errorResponse('系统处理失败，请稍后重试');
     }
 
     try {
@@ -66,11 +62,15 @@ export async function onRequestPost({ request, env }) {
         
         // Double check email claim record
         if (data.records.some(r => r.email.toLowerCase() === normalizedEmail)) {
+            // Release lock
+            await env.DB.prepare("DELETE FROM gift_codes WHERE email = ?").bind(claimLockKey).run();
             return errorResponse('您已经领取过主机券了');
         }
 
         const giftIdx = data.gifts.findIndex(g => g.claimed === 0);
         if (giftIdx === -1) {
+            // Release lock
+            await env.DB.prepare("DELETE FROM gift_codes WHERE email = ?").bind(claimLockKey).run();
             return errorResponse('主机券已发完，请联系管理员');
         }
 
@@ -84,12 +84,16 @@ export async function onRequestPost({ request, env }) {
         });
 
         const ok = await saveJsonBinData(env.JSONBIN_API_KEY, data);
-        if (!ok) return errorResponse('系统保存失败，请稍后重试');
+        if (!ok) {
+            // Release lock
+            await env.DB.prepare("DELETE FROM gift_codes WHERE email = ?").bind(claimLockKey).run();
+            return errorResponse('系统保存失败，请稍后重试');
+        }
 
         // Release lock
         await env.DB.prepare("DELETE FROM gift_codes WHERE email = ?").bind(claimLockKey).run();
 
-        // 3. Return ONLY the code for this specific gift
+        // Return the gift code
         return jsonResponse({
             success: true,
             giftName: gift.name,
