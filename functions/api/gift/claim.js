@@ -30,45 +30,33 @@ export async function onRequestPost({ request, env }) {
         return errorResponse('系统暂不可用', 503);
     }
     
-    const stored = await env.DB.prepare(
-        "SELECT code, expires_at FROM gift_codes WHERE email = ?"
-    ).bind(normalizedEmail).first();
-
-    if (!stored || stored.code !== code) {
-        return errorResponse('验证码无效或已过期');
-    }
-    if (Date.now() > stored.expires_at) {
-        return errorResponse('验证码已过期');
-    }
-    
     // Use D1 transaction for atomic operations to prevent race conditions
-    try {
-        await env.DB.batch([
-            // Delete the code after verification (atomic within transaction)
-            env.DB.prepare("DELETE FROM gift_codes WHERE email = ?").bind(normalizedEmail)
-        ]);
-    } catch (e) {
-        console.error('Failed to delete verification code:', e);
-        // Continue anyway - code will expire naturally
-    }
-
-    // 2. Critical section: Get data, find gift, update data (with locking via D1)
-    // Use D1 to track claim attempts and prevent race conditions
     const claimLockKey = `claim_lock_${normalizedEmail}`;
     
-    // Try to acquire a simple lock using D1 (check-and-set pattern)
-    const lockCheck = await env.DB.prepare(
-        "SELECT 1 FROM gift_codes WHERE email = ? AND code = 'LOCKED'"
-    ).bind(claimLockKey).first();
-    
-    if (lockCheck) {
-        return errorResponse('领取处理中，请稍后重试');
+    try {
+        // Atomic operation: verify code, delete it, and create lock in one transaction
+        await env.DB.batch([
+            // Verify and delete the code (will fail if code doesn't match due to WHERE clause)
+            env.DB.prepare("DELETE FROM gift_codes WHERE email = ? AND code = ?").bind(normalizedEmail, code),
+            // Create lock to prevent concurrent claims
+            env.DB.prepare("INSERT OR REPLACE INTO gift_codes (email, code, expires_at) VALUES (?, ?, ?)").bind(claimLockKey, 'LOCKED', Date.now() + 5000)
+        ]);
+        
+        // Verify the code was actually deleted (if not, code was wrong)
+        const verifyDeleted = await env.DB.prepare(
+            "SELECT 1 FROM gift_codes WHERE email = ? AND code = ?"
+        ).bind(normalizedEmail, code).first();
+        
+        if (verifyDeleted) {
+            // Code still exists, meaning DELETE didn't match (wrong code)
+            await env.DB.prepare("DELETE FROM gift_codes WHERE email = ?").bind(claimLockKey).run();
+            return errorResponse('验证码无效或已过期');
+        }
+        
+    } catch (e) {
+        console.error('Transaction failed:', e);
+        return errorResponse('系统处理失败，请稍后重试');
     }
-    
-    // Create temporary lock
-    await env.DB.prepare(
-        "INSERT OR REPLACE INTO gift_codes (email, code, expires_at) VALUES (?, ?, ?)"
-    ).bind(claimLockKey, 'LOCKED', Date.now() + 5000).run();
 
     try {
         const data = await getJsonBinData(env.JSONBIN_API_KEY);

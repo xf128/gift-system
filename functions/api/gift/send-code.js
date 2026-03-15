@@ -35,8 +35,13 @@ export async function onRequestPost({ request, env }) {
             "SELECT created_at FROM gift_codes WHERE email = ? ORDER BY created_at DESC LIMIT 1"
         ).bind(normalizedEmail).first();
         
-        if (recent && (Date.now() - new Date(recent.created_at).getTime()) < RATE_LIMIT_MS) {
-            return errorResponse('发送过于频繁，请稍后再试');
+        if (recent && recent.created_at) {
+            const createdTime = new Date(recent.created_at).getTime();
+            const elapsed = Date.now() - createdTime;
+            if (elapsed < RATE_LIMIT_MS) {
+                const remainSec = Math.ceil((RATE_LIMIT_MS - elapsed) / 1000);
+                return errorResponse(`发送过于频繁，请 ${remainSec} 秒后再试`);
+            }
         }
     }
 
